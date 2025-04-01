@@ -18,7 +18,7 @@ module "firewall_policy" {
 }
 
 module "virtual_wan" {
-  source  = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-virtualwan.git?ref=v0.9.0-local"
+  source  = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-virtualwan.git?ref=v0.11.0-local"
 
   allow_branch_to_branch_traffic        = try(var.virtual_wan_settings.allow_branch_to_branch_traffic, null)
   disable_vpn_encryption                = try(var.virtual_wan_settings.disable_vpn_encryption, false)
