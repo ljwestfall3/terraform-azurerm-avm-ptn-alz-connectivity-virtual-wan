@@ -77,7 +77,7 @@ module "dns_resolver" {
 }
 
 module "private_dns_zones" {
-  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-network-private-link-private-dns-zones.git?ref=v0.10.1-local"
+  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-network-private-link-private-dns-zones.git?ref=v0.11.0-local"
   for_each = local.private_dns_zones
 
   location                                = each.value.location
@@ -146,7 +146,7 @@ module "bastion_public_ip" {
 }
 
 module "bastion_host" {
-  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-res-network-bastionhost.git?ref=v0.7.2-local"
+  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-res-network-bastionhost.git?ref=v0.6.0-local"
   for_each = local.bastion_hosts
 
   location               = each.value.location
