@@ -24,7 +24,7 @@ module "firewall_policy" {
 }
 
 module "virtual_wan" {
-  source  = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-virtualwan.git?ref=v0.12.2-local"
+  source  = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-virtualwan.git?ref=v0.12.3-local"
 
   location                              = var.virtual_wan_settings.location
   resource_group_name                   = var.virtual_wan_settings.resource_group_name
