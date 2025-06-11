@@ -99,18 +99,11 @@ module "private_dns_zone_auto_registration" {
   source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-res-network-privatednszone.git?ref=v0.3.3-local"
   for_each = local.private_dns_zones_auto_registration
 
-  domain_name         = each.value.auto_registration_zone_name
-  resource_group_name = each.value.resource_group_name
-  enable_telemetry    = var.enable_telemetry
-  tags                = var.tags
-  virtual_network_links = {
-    auto_registration = {
-      vnetlinkname     = "vnet-link-${each.key}-auto-registration"
-      vnetid           = each.value.vnet_resource_id
-      autoregistration = true
-      tags             = var.tags
-    }
-  }
+  domain_name           = each.value.auto_registration_zone_name
+  resource_group_name   = each.value.resource_group_name
+  enable_telemetry      = var.enable_telemetry
+  tags                  = var.tags
+  virtual_network_links = each.value.virtual_network_links
 }
 
 module "ddos_protection_plan" {
