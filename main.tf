@@ -52,7 +52,7 @@ module "virtual_wan" {
 }
 
 module "virtual_network_side_car" {
-  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-res-network-virtualnetwork.git?ref=v0.8.1-local"
+  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-res-network-virtualnetwork.git?ref=v0.9.3-local"
   for_each = local.side_car_virtual_networks
 
   address_space        = each.value.address_space
