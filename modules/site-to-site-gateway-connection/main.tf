@@ -16,7 +16,6 @@ resource "azurerm_vpn_gateway_connection" "vpn_site_connection" {
       bandwidth_mbps                        = try(vpn_link.value.bandwidth_mbps, null)
       bgp_enabled                           = try(vpn_link.value.bgp_enabled, null)
       connection_mode                       = try(vpn_link.value.connection_mode, null)
-      dpd_timeout_seconds                   = try(vpn_link.value.dpd_timeout_seconds, null)
       egress_nat_rule_ids                   = try(vpn_link.value.egress_nat_rule_ids, null)
       ingress_nat_rule_ids                  = try(vpn_link.value.ingress_nat_rule_ids, null)
       local_azure_ip_address_enabled        = try(vpn_link.value.local_azure_ip_address_enabled, null)
@@ -50,7 +49,6 @@ resource "azurerm_vpn_gateway_connection" "vpn_site_connection" {
       }
     }
   }
-
   dynamic "routing" {
     for_each = each.value.routing != null ? [each.value.routing] : []
 
@@ -67,7 +65,6 @@ resource "azurerm_vpn_gateway_connection" "vpn_site_connection" {
       }
     }
   }
-
   dynamic "traffic_selector_policy" {
     for_each = each.value.traffic_selector_policy != null ? [each.value.traffic_selector_policy] : []
 
@@ -77,3 +74,4 @@ resource "azurerm_vpn_gateway_connection" "vpn_site_connection" {
     }
   }
 }
+

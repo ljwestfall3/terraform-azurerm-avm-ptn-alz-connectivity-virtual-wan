@@ -45,32 +45,6 @@ variable "allow_branch_to_branch_traffic" {
   DESCRIPTION
 }
 
-variable "bgp_connections" {
-  type = map(object({
-    name                          = string
-    virtual_hub_key               = string
-    peer_asn                      = number
-    peer_ip                       = string
-    virtual_network_connection_id = optional(string)
-  }))
-  default     = {}
-  description = <<DESCRIPTION
-Map of objects for BGP connections to create on the Virtual Hub's built-in router. This is used to peer Network Virtual Appliances (NVAs) such as Palo Alto, FortiGate or Cisco SD-WAN deployed in spoke virtual networks directly with the Virtual Hub.
-
-The key is deliberately arbitrary to avoid issues with known after apply values. The value is an object, of which there can be multiple in the map:
-
-- `name`: Name for the BGP connection.
-- `virtual_hub_key`: The arbitrary key specified in the map of objects variable called `virtual_hubs` for the object specifying the Virtual Hub on which the BGP connection should be created.
-- `peer_asn`: The peer ASN of the NVA. Must not be `65515` (the Azure-assigned vHub ASN) or any other reserved value documented for Virtual WAN.
-- `peer_ip`: The peer IP address of the NVA.
-- `virtual_network_connection_id`: Optional resource ID of the Virtual Network Connection (`azurerm_virtual_hub_connection`) for the spoke virtual network hosting the NVA.
-
-> Note: There can be multiple objects in this map, one for each BGP peer connection you wish to create on the Virtual WAN Virtual Hubs that have been defined in the variable `virtual_hubs`.
-
-  DESCRIPTION
-  nullable    = false
-}
-
 variable "create_resource_group" {
   type        = bool
   default     = false
@@ -206,11 +180,7 @@ variable "firewalls" {
     zones                = optional(list(number), [1, 2, 3])
     firewall_policy_id   = optional(string)
     vhub_public_ip_count = optional(string)
-    ip_configurations = optional(map(object({
-      name                 = string
-      public_ip_address_id = string
-    })), {})
-    tags = optional(map(string))
+    tags                 = optional(map(string))
   }))
   default     = {}
   description = <<DESCRIPTION
@@ -225,8 +195,7 @@ The key is deliberately arbitrary to avoid issues with known after apply values.
 - `name`: The name for the Azure Firewall resource.
 - `zones`: Optional list of zones to deploy the Azure Firewall into. Defaults to `[1, 2, 3]`.
 - `firewall_policy_id`: Optional Azure Firewall Policy Resource ID to associate with the Azure Firewall.
-- `vhub_public_ip_count`: Optional managed public IP count, retaining its string type. Null defaults to one managed IP when `ip_configurations` is empty; with customer IPs only null or zero is valid.
-- `ip_configurations`: Optional map, default `{}`, keyed by stable caller keys known at plan time. Each entry requires `name` and `public_ip_address_id`; IDs may be unknown until apply. Names and IDs must be unique ignoring case. A nonempty map selects customer-only mode using caller-owned Standard/Regional static IPv4 addresses in the same subscription and region. Same-mode changes are maintenance operations; mode conversion is blocked.
+- `vhub_public_ip_count`: Optional number of public IP addresses to associate with the Azure Firewall.
 - `tags`: Optional tags to apply to the Azure Firewall resource.
 
 > Note: There can be multiple objects in this map, one for each Azure Firewall you wish to deploy into the Virtual WAN Virtual Hubs that have been defined in the variable `virtual_hubs`.
@@ -510,12 +479,6 @@ variable "virtual_network_connections" {
   nullable    = false
 }
 
-variable "virtual_wan_id" {
-  type        = string
-  default     = null
-  description = "(Optional) Resource ID of an existing Virtual WAN. If set, the module will not create a new Virtual WAN and will attach hubs/gateways to this vWAN."
-}
-
 variable "virtual_wan_tags" {
   type        = map(string)
   default     = {}
@@ -585,7 +548,6 @@ variable "vpn_site_connections" {
       bandwidth_mbps       = optional(number)
       bgp_enabled          = optional(bool)
       connection_mode      = optional(string, "Default")
-      dpd_timeout_seconds  = optional(number)
 
       ipsec_policy = optional(object({
         dh_group                 = string
@@ -640,7 +602,6 @@ variable "vpn_site_connections" {
     - `bandwidth_mbps`: Optional bandwidth in Mbps for the VPN link.
     - `bgp_enabled`: Optional boolean to enable BGP for the VPN link.
     - `connection_mode`: Optional connection mode for the VPN link. Allowed values are: `Default`, `InitiatorOnly`, `ResponderOnly`. Defaults to `Default`.
-    - `dpd_timeout_seconds`: Optional dead peer detection timeout in seconds for the VPN link. Allowed values are between `9` and `3600`.
     - `ipsec_policy`: Optional IPsec policy object for the VPN link, which includes:
       - `dh_group`: DH group for the IPsec policy. Allowed values are: `DHGroup1`, `DHGroup2`, `DHGroup14`, `DHGroup24`, `DHGroup2048`, `ECP256`, `ECP384`.
       - `ike_encryption_algorithm`: IKE encryption algorithm for the IPsec policy. Allowed values are: `AES128`, `AES192`, `AES256`, `DES`, `DES3`, `GCMAES128`, `GCMAES256`.

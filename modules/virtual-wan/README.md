@@ -113,7 +113,7 @@ The following requirements are needed by this module:
 
 - <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) (~> 1.7)
 
-- <a name="requirement_azapi"></a> [azapi](#requirement\_azapi) (~> 2.12)
+- <a name="requirement_azapi"></a> [azapi](#requirement\_azapi) (~> 2.4)
 
 - <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) (~> 4.0)
 
@@ -127,7 +127,6 @@ The following resources are used by this module:
 
 - [azurerm_point_to_site_vpn_gateway.p2s_gateway](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/point_to_site_vpn_gateway) (resource)
 - [azurerm_resource_group.rg](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) (resource)
-- [azurerm_virtual_hub_bgp_connection.bgp_connection](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_hub_bgp_connection) (resource)
 - [azurerm_virtual_hub_route_table.virtual_hub_route_table](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_hub_route_table) (resource)
 - [azurerm_virtual_hub_routing_intent.routing_intent](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_hub_routing_intent) (resource)
 - [azurerm_virtual_wan.virtual_wan](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_wan) (resource)
@@ -179,34 +178,6 @@ Description:   Boolean toggle to toggle support for VWAN branch to branch traffi
 Type: `bool`
 
 Default: `true`
-
-### <a name="input_bgp_connections"></a> [bgp\_connections](#input\_bgp\_connections)
-
-Description: Map of objects for BGP connections to create on the Virtual Hub's built-in router. This is used to peer Network Virtual Appliances (NVAs) such as Palo Alto, FortiGate or Cisco SD-WAN deployed in spoke virtual networks directly with the Virtual Hub.
-
-The key is deliberately arbitrary to avoid issues with known after apply values. The value is an object, of which there can be multiple in the map:
-
-- `name`: Name for the BGP connection.
-- `virtual_hub_key`: The arbitrary key specified in the map of objects variable called `virtual_hubs` for the object specifying the Virtual Hub on which the BGP connection should be created.
-- `peer_asn`: The peer ASN of the NVA. Must not be `65515` (the Azure-assigned vHub ASN) or any other reserved value documented for Virtual WAN.
-- `peer_ip`: The peer IP address of the NVA.
-- `virtual_network_connection_id`: Optional resource ID of the Virtual Network Connection (`azurerm_virtual_hub_connection`) for the spoke virtual network hosting the NVA.
-
-> Note: There can be multiple objects in this map, one for each BGP peer connection you wish to create on the Virtual WAN Virtual Hubs that have been defined in the variable `virtual_hubs`.
-
-Type:
-
-```hcl
-map(object({
-    name                          = string
-    virtual_hub_key               = string
-    peer_asn                      = number
-    peer_ip                       = string
-    virtual_network_connection_id = optional(string)
-  }))
-```
-
-Default: `{}`
 
 ### <a name="input_create_resource_group"></a> [create\_resource\_group](#input\_create\_resource\_group)
 
@@ -363,8 +334,7 @@ The key is deliberately arbitrary to avoid issues with known after apply values.
 - `name`: The name for the Azure Firewall resource.
 - `zones`: Optional list of zones to deploy the Azure Firewall into. Defaults to `[1, 2, 3]`.
 - `firewall_policy_id`: Optional Azure Firewall Policy Resource ID to associate with the Azure Firewall.
-- `vhub_public_ip_count`: Optional managed public IP count, retaining its string type. Null defaults to one managed IP when `ip_configurations` is empty; with customer IPs only null or zero is valid.
-- `ip_configurations`: Optional map, default `{}`, keyed by stable caller keys known at plan time. Each entry requires `name` and `public_ip_address_id`; IDs may be unknown until apply. Names and IDs must be unique ignoring case. A nonempty map selects customer-only mode using caller-owned Standard/Regional static IPv4 addresses in the same subscription and region. Same-mode changes are maintenance operations; mode conversion is blocked.
+- `vhub_public_ip_count`: Optional number of public IP addresses to associate with the Azure Firewall.
 - `tags`: Optional tags to apply to the Azure Firewall resource.
 
 > Note: There can be multiple objects in this map, one for each Azure Firewall you wish to deploy into the Virtual WAN Virtual Hubs that have been defined in the variable `virtual_hubs`.
@@ -380,33 +350,8 @@ map(object({
     zones                = optional(list(number), [1, 2, 3])
     firewall_policy_id   = optional(string)
     vhub_public_ip_count = optional(string)
-    ip_configurations = optional(map(object({
-      name                 = string
-      public_ip_address_id = string
-    })), {})
-    tags = optional(map(string))
+    tags                 = optional(map(string))
   }))
-```
-
-Default: `{}`
-
-### <a name="input_ignore_body_changes"></a> [ignore\_body\_changes](#input\_ignore\_body\_changes)
-
-Description: AzAPI body-relative dot paths. Changes take effect after apply; ignored configuration is not sent to Azure.
-
-- `network_azure_firewalls` - Firewall submodule overrides.
-- `network_azure_firewalls.network_azure_firewalls` - Firewall body paths, excluding IP and hub association paths.
-- `network_azure_firewalls.insights_diagnostic_settings` - Firewall diagnostic setting paths.
-
-Type:
-
-```hcl
-object({
-    network_azure_firewalls = optional(object({
-      network_azure_firewalls      = optional(list(string), [])
-      insights_diagnostic_settings = optional(list(string), [])
-    }), {})
-  })
 ```
 
 Default: `{}`
@@ -520,49 +465,6 @@ Type: `map(string)`
 
 Default: `{}`
 
-### <a name="input_resource_types"></a> [resource\_types](#input\_resource\_types)
-
-Description: AzAPI resource types passed to the firewall submodule. Omitted API versions use the owning submodule's defaults.
-
-- `network_azure_firewalls` - Firewall submodule resource types.
-- `network_azure_firewalls.network_azure_firewalls` - Firewall and inventory API.
-- `network_azure_firewalls.network_public_ip_addresses` - Caller-owned public IP read API.
-- `network_azure_firewalls.network_virtual_hubs` - Secured hub read API.
-- `network_azure_firewalls.network_virtual_wans` - Secured hub's parent Virtual WAN read API.
-- `network_azure_firewalls.insights_diagnostic_settings` - Firewall diagnostic settings API.
-
-Type:
-
-```hcl
-object({
-    network_azure_firewalls = optional(object({
-      network_azure_firewalls      = optional(string)
-      network_public_ip_addresses  = optional(string)
-      network_virtual_hubs         = optional(string)
-      network_virtual_wans         = optional(string)
-      insights_diagnostic_settings = optional(string)
-    }), {})
-  })
-```
-
-Default: `{}`
-
-### <a name="input_retry"></a> [retry](#input\_retry)
-
-Description: AzAPI retry settings passed unchanged to firewalls: error\_message\_regex, interval\_seconds and max\_interval\_seconds.
-
-Type:
-
-```hcl
-object({
-    error_message_regex  = optional(list(string))
-    interval_seconds     = optional(number)
-    max_interval_seconds = optional(number)
-  })
-```
-
-Default: `null`
-
 ### <a name="input_routing_intents"></a> [routing\_intents](#input\_routing\_intents)
 
 Description:   Map of objects for routing intents to deploy into the Virtual WAN Virtual Hubs that have been defined in the variable `virtual_hubs`.
@@ -599,23 +501,6 @@ Description:   (Optional) Tags to apply to the Resource Group, if created by mod
 Type: `map(string)`
 
 Default: `null`
-
-### <a name="input_timeouts"></a> [timeouts](#input\_timeouts)
-
-Description: AzAPI create, read, update and delete timeouts passed unchanged to firewalls.
-
-Type:
-
-```hcl
-object({
-    create = optional(string, "90m")
-    read   = optional(string, "5m")
-    update = optional(string, "90m")
-    delete = optional(string, "90m")
-  })
-```
-
-Default: `{}`
 
 ### <a name="input_type"></a> [type](#input\_type)
 
@@ -746,14 +631,6 @@ map(object({
 
 Default: `{}`
 
-### <a name="input_virtual_wan_id"></a> [virtual\_wan\_id](#input\_virtual\_wan\_id)
-
-Description: (Optional) Resource ID of an existing Virtual WAN. If set, the module will not create a new Virtual WAN and will attach hubs/gateways to this vWAN.
-
-Type: `string`
-
-Default: `null`
-
 ### <a name="input_virtual_wan_tags"></a> [virtual\_wan\_tags](#input\_virtual\_wan\_tags)
 
 Description:   (Optional) Tags to apply to the Virtual WAN resource only.
@@ -826,7 +703,6 @@ Description:   Map of objects for VPN Site connections to connect VPN Sites to t
     - `bandwidth_mbps`: Optional bandwidth in Mbps for the VPN link.
     - `bgp_enabled`: Optional boolean to enable BGP for the VPN link.
     - `connection_mode`: Optional connection mode for the VPN link. Allowed values are: `Default`, `InitiatorOnly`, `ResponderOnly`. Defaults to `Default`.
-    - `dpd_timeout_seconds`: Optional dead peer detection timeout in seconds for the VPN link. Allowed values are between `9` and `3600`.
     - `ipsec_policy`: Optional IPsec policy object for the VPN link, which includes:
       - `dh_group`: DH group for the IPsec policy. Allowed values are: `DHGroup1`, `DHGroup2`, `DHGroup14`, `DHGroup24`, `DHGroup2048`, `ECP256`, `ECP384`.
       - `ike_encryption_algorithm`: IKE encryption algorithm for the IPsec policy. Allowed values are: `AES128`, `AES192`, `AES256`, `DES`, `DES3`, `GCMAES128`, `GCMAES256`.
@@ -876,7 +752,6 @@ map(object({
       bandwidth_mbps       = optional(number)
       bgp_enabled          = optional(bool)
       connection_mode      = optional(string, "Default")
-      dpd_timeout_seconds  = optional(number)
 
       ipsec_policy = optional(object({
         dh_group                 = string
@@ -1054,6 +929,10 @@ Description: A map of point to site VPN gateway names with the map keys of the `
 
 Description: A map of point to site VPN gateway names with the map keys of the `p2s_gateways` variable.
 
+### <a name="output_resource"></a> [resource](#output\_resource)
+
+Description: The full resource outputs.
+
 ### <a name="output_resource_group_name"></a> [resource\_group\_name](#output\_resource\_group\_name)
 
 Description: Resource Group Name
@@ -1070,10 +949,6 @@ Description: S2S VPN Gateway Objects
 
 Description: S2S VPN Gateway ID
 
-### <a name="output_virtual_hub_bgp_connection_resource_ids"></a> [virtual\_hub\_bgp\_connection\_resource\_ids](#output\_virtual\_hub\_bgp\_connection\_resource\_ids)
-
-Description: A map of Virtual Hub BGP connection resource IDs with the map keys of the `bgp_connections` map of each entry in the `virtual_hubs` variable, prefixed with the virtual hub key (i.e. `<hub_key>-<bgp_connection_key>`).
-
 ### <a name="output_virtual_hub_resource_ids"></a> [virtual\_hub\_resource\_ids](#output\_virtual\_hub\_resource\_ids)
 
 Description: A map of Azure Virtual Hub resource IDs with the map keys of the `virtual_hubs` variable.
@@ -1081,6 +956,10 @@ Description: A map of Azure Virtual Hub resource IDs with the map keys of the `v
 ### <a name="output_virtual_hub_resource_names"></a> [virtual\_hub\_resource\_names](#output\_virtual\_hub\_resource\_names)
 
 Description: A map of Azure Virtual Hub resource names with the map keys of the `virtual_hubs` variable.
+
+### <a name="output_virtual_wan_id"></a> [virtual\_wan\_id](#output\_virtual\_wan\_id)
+
+Description: Virtual WAN ID
 
 ### <a name="output_vpn_gateway_resource_ids"></a> [vpn\_gateway\_resource\_ids](#output\_vpn\_gateway\_resource\_ids)
 

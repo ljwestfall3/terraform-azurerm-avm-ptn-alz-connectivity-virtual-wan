@@ -68,29 +68,9 @@ output "private_dns_resolver_resources" {
   value       = module.dns_resolver
 }
 
-output "private_dns_zone_resource_ids" {
-  description = "Resource IDs of the private DNS zones"
-  value       = { for key, value in module.private_dns_zones : key => value.private_dns_zone_resource_ids }
-}
-
-output "private_link_private_dns_zones_maps" {
-  description = "Final configuration applied to the private DNS zones and associated virtual network links."
-  value       = { for key, value in module.private_dns_zones : key => value.private_link_private_dns_zones_map }
-}
-
 output "resource_id" {
   description = "The resource ID of the virtual WAN."
   value       = local.has_regions ? module.virtual_wan[0].resource_id : null
-}
-
-output "route_map_resource_ids_by_name" {
-  description = "A map of route map name to resource ID."
-  value       = { for key, value in module.route_map : value.name => value.resource_id }
-}
-
-output "route_map_resources" {
-  description = "The route map resource objects, grouped by the arbitrary map key supplied in the route_maps variable."
-  value       = { for key, value in module.route_map : key => value.resource }
 }
 
 output "sidecar_virtual_network_resource_ids" {
@@ -101,11 +81,6 @@ output "sidecar_virtual_network_resource_ids" {
 output "sidecar_virtual_network_resources" {
   description = "The side car virtual networks associated with the virtual WAN, grouped by hub key."
   value       = module.virtual_network_side_car
-}
-
-output "virtual_hub_bgp_connection_resource_ids" {
-  description = "The resource IDs of the Virtual Hub BGP connections (NVA peers), keyed by `<virtual_hub_key>-<bgp_connection_key>`."
-  value       = local.has_regions ? module.virtual_wan[0].virtual_hub_bgp_connection_resource_ids : null
 }
 
 output "virtual_hub_resource_ids" {

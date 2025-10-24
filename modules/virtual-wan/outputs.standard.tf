@@ -40,12 +40,12 @@ output "firewall_resource_names_by_hub_key" {
 
 output "name" {
   description = "Virtual WAN Name"
-  value       = local.effective_virtual_wan_name
+  value       = azurerm_virtual_wan.virtual_wan.name
 }
 
 output "resource_id" {
   description = "Virtual WAN ID"
-  value       = local.effective_virtual_wan_id
+  value       = azurerm_virtual_wan.virtual_wan.id
 }
 
 output "virtual_hub_resource_ids" {

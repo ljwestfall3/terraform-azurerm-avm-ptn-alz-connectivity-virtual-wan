@@ -27,35 +27,23 @@ module "virtual_wan" {
   source = "./modules/virtual-wan"
   count  = local.has_regions ? 1 : 0
 
-  location                       = local.virtual_wan.location
-  resource_group_name            = local.virtual_wan.resource_group_name
-  virtual_wan_name               = local.virtual_wan.name
-  allow_branch_to_branch_traffic = local.virtual_wan.allow_branch_to_branch_traffic
-  bgp_connections                = local.bgp_connections
-  disable_vpn_encryption         = local.virtual_wan.disable_vpn_encryption
-  enable_telemetry               = var.enable_telemetry
-  er_circuit_connections         = local.express_route_circuit_connections
-  expressroute_gateways          = local.virtual_network_gateways_express_route
-  firewalls                      = local.firewalls
-  ignore_body_changes = {
-    network_azure_firewalls = {
-      network_azure_firewalls      = var.ignore_body_changes.virtual_hubs_firewalls
-      insights_diagnostic_settings = var.ignore_body_changes.virtual_hubs_firewalls_diagnostic_settings
-    }
-  }
+  location                              = local.virtual_wan.location
+  resource_group_name                   = local.virtual_wan.resource_group_name
+  virtual_wan_name                      = local.virtual_wan.name
+  allow_branch_to_branch_traffic        = local.virtual_wan.allow_branch_to_branch_traffic
+  disable_vpn_encryption                = local.virtual_wan.disable_vpn_encryption
+  enable_telemetry                      = var.enable_telemetry
+  er_circuit_connections                = local.express_route_circuit_connections
+  expressroute_gateways                 = local.virtual_network_gateways_express_route
+  firewalls                             = local.firewalls
   office365_local_breakout_category     = local.virtual_wan.office365_local_breakout_category
   p2s_gateway_vpn_server_configurations = local.p2s_gateway_vpn_server_configurations
   p2s_gateways                          = local.p2s_gateways
-  resource_types                        = var.resource_types.network_virtual_wans
-  retry                                 = var.retry
   routing_intents                       = local.routing_intents
   tags                                  = var.tags
-  timeouts                              = var.timeouts
   type                                  = local.virtual_wan.type
-  virtual_hub_route_tables              = local.virtual_hub_route_tables
   virtual_hubs                          = local.virtual_hubs
   virtual_network_connections           = local.virtual_network_connections
-  virtual_wan_id                        = local.virtual_wan.id
   virtual_wan_tags                      = local.virtual_wan.tags
   vpn_gateways                          = local.virtual_network_gateways_vpn
   vpn_site_connections                  = local.vpn_site_connections
@@ -68,7 +56,7 @@ moved {
 }
 
 module "virtual_network_side_car" {
-  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-res-network-virtualnetwork.git?ref=v0.22.2-local"
+  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-res-network-virtualnetwork.git?ref=v0.15.0-local"
   for_each = local.sidecar_virtual_networks
 
   location             = each.value.location
@@ -76,7 +64,6 @@ module "virtual_network_side_car" {
   address_space        = each.value.address_space
   ddos_protection_plan = each.value.ddos_protection_plan
   enable_telemetry     = var.enable_telemetry
-  ignore_body_changes  = local.sidecar_virtual_network_ignore_body_changes
   name                 = each.value.name
   retry                = var.retry
   subnets              = local.subnets[each.key]
@@ -96,40 +83,32 @@ module "dns_resolver" {
   inbound_endpoints           = each.value.inbound_endpoints
   outbound_endpoints          = each.value.outbound_endpoints
   tags                        = each.value.tags
-
-  depends_on = [module.virtual_network_side_car]
 }
 
 module "private_dns_zones" {
-  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-network-private-link-private-dns-zones.git?ref=v0.23.2-local"
+  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-network-private-link-private-dns-zones.git?ref=v0.15.0-local"
   for_each = local.private_dns_zones
 
-  location                                                   = each.value.location
-  parent_id                                                  = each.value.parent_id
-  enable_telemetry                                           = var.enable_telemetry
-  private_link_excluded_zones                                = each.value.private_link_excluded_zones
-  private_link_private_dns_zones                             = each.value.private_link_private_dns_zones
-  private_link_private_dns_zones_additional                  = each.value.private_link_private_dns_zones_additional
-  private_link_private_dns_zones_regex_filter                = each.value.private_link_private_dns_zones_regex_filter
-  tags                                                       = each.value.tags
-  virtual_network_link_additional_virtual_networks           = each.value.virtual_network_link_additional_virtual_networks
-  virtual_network_link_by_zone_and_virtual_network           = each.value.virtual_network_link_by_zone_and_virtual_network
-  virtual_network_link_default_virtual_networks              = each.value.virtual_network_link_default_virtual_networks
-  virtual_network_link_name_template                         = each.value.virtual_network_link_name_template
-  virtual_network_link_overrides_by_virtual_network          = each.value.virtual_network_link_overrides_by_virtual_network
-  virtual_network_link_overrides_by_zone                     = each.value.virtual_network_link_overrides_by_zone
-  virtual_network_link_overrides_by_zone_and_virtual_network = each.value.virtual_network_link_overrides_by_zone_and_virtual_network
-  virtual_network_link_resolution_policy_default             = each.value.virtual_network_link_resolution_policy_default
+  location                                    = each.value.location
+  resource_group_name                         = each.value.resource_group_name
+  enable_telemetry                            = var.enable_telemetry
+  private_link_excluded_zones                 = each.value.private_dns_settings.private_link_excluded_zones
+  private_link_private_dns_zones              = each.value.private_dns_settings.private_link_private_dns_zones
+  private_link_private_dns_zones_additional   = each.value.private_dns_settings.private_link_private_dns_zones_additional
+  private_link_private_dns_zones_regex_filter = each.value.private_link_private_dns_zones_regex_filter
+  resource_group_creation_enabled             = false
+  tags                                        = var.tags
+  virtual_network_resource_ids_to_link_to     = local.private_dns_zones_virtual_network_links
 }
 
 module "private_dns_zone_auto_registration" {
-  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-res-network-privatednszone.git?ref=v0.4.3-local"
+  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-res-network-privatednszone.git?ref=v0.3.3-local"
   for_each = local.private_dns_zones_auto_registration
 
   domain_name           = each.value.domain_name
-  parent_id             = each.value.parent_id
+  resource_group_name   = each.value.resource_group_name
   enable_telemetry      = var.enable_telemetry
-  tags                  = each.value.tags
+  tags                  = var.tags
   virtual_network_links = each.value.virtual_network_links
 }
 
@@ -187,18 +166,4 @@ module "bastion_host" {
   tags                   = each.value.tags
   tunneling_enabled      = each.value.bastion_settings.tunneling_enabled
   zones                  = each.value.zones
-}
-
-module "route_map" {
-  source   = "./modules/route-map"
-  for_each = var.route_maps
-
-  name                            = each.value.name
-  virtual_hub_id                  = module.virtual_wan[0].virtual_hub_resource_ids[each.value.virtual_hub_key]
-  associated_inbound_connections  = each.value.associated_inbound_connections
-  associated_outbound_connections = each.value.associated_outbound_connections
-  ignore_body_changes             = var.ignore_body_changes.virtual_hubs_route_maps
-  retry                           = var.retry
-  rules                           = each.value.rules
-  timeouts                        = var.timeouts
 }
