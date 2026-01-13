@@ -86,7 +86,7 @@ module "dns_resolver" {
 }
 
 module "private_dns_zones" {
-  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-network-private-link-private-dns-zones.git?ref=v0.22.2-local"
+  source   = "git::https://avm.mirror.invalid/terraform-azurerm-avm-ptn-network-private-link-private-dns-zones.git?ref=v0.23.1-local"
   for_each = local.private_dns_zones
 
   location                                                   = each.value.location
