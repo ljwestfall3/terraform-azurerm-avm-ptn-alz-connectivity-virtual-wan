@@ -6,6 +6,70 @@ This module deploys a virtual WAN topology aligned to the Azure Landing Zones (A
 
 This module is leveraged by the [Azure Landing Zones IaC Accelerator](https://aka.ms/alz), head over there to learn more. It is part of the Azure Verified Modules for Platform Landing Zone (ALZ) set of modules.
 
+## Customer-owned secured-hub public IPs
+
+Configure `virtual_hubs[hub_key].firewall.ip_configurations` to attach caller-owned public IPs. For example, add this firewall configuration to a hub entry:
+
+```hcl
+firewall = {
+  ip_configurations = {
+    primary = {
+      name                 = "internet-primary"
+      public_ip_address_id = azapi_resource.public_ips["primary"].id
+    }
+    secondary = {
+      name                 = "internet-secondary"
+      public_ip_address_id = azapi_resource.public_ips["secondary"].id
+    }
+  }
+}
+```
+
+Keys must be stable and known at plan time; public IP resource IDs and the hub ID can be unknown until apply. Names are explicit, not generated. Configuration names must be unique within a firewall, and public IP IDs must be unique across the configured firewalls, ignoring case.
+
+| `ip_configurations` | `vhub_public_ip_count` | Mode |
+| --- | --- | --- |
+| Empty or omitted | Omitted or null | Managed, one public IP |
+| Empty | Positive integral string | Managed, requested count |
+| Nonempty | Omitted, null, or `"0"` | Customer-only |
+| Nonempty | Positive count | Rejected: modes cannot be mixed |
+| Empty | `"0"` | Rejected: not a no-public-IP mode |
+
+`vhub_public_ip_count` retains its published string type. Negative, fractional and nonnumeric counts are rejected. Existing managed firewalls stay on their original AzureRM 4 resource and diagnostic-setting addresses, including the historical moved-block chain. Their count increases/decreases continue to use AzureRM's retained-address behavior; they do not migrate provider or require user state commands. The module automatically records each firewall's original mode in a state-only `terraform_data` resource.
+
+Customer mode requires a Standard or Premium firewall, a Standard hub, and Standard/Regional static IPv4 public IPs in the same subscription and region. An IP must be unassociated or already associated with this exact firewall. The module reads, but does not own or delete, supplied IP resources. Existing firewall policy references, including `firewall_policy.base_policy_id`, and the original firewall output shapes are preserved. Public-IP outputs contain address strings, not resource IDs.
+
+Customer public IPs must carry a zone set matching the firewall's. The module rejects IPs with no zones at plan time, but an IP whose zones merely *differ* from `firewall.zones` is rejected later by Azure at apply with `AzureFirewallZoneConstraintDoesNotMatchPublicIpAddressZoneConstraint`. Public IPs allocated from a public IP prefix inherit the prefix's zones, so set the prefix zones to match the firewall.
+
+### Deploying a managed hub and a customer-IP hub in the same region
+
+This is the natural comparison and migration-staging topology for this feature, and it requires **explicit** `firewall_policy.name` values on each hub. The default naming convention resolves `fwp-hub-${location}-${sequence}` from a constant sequence, so two hubs sharing a region compute the same firewall policy name and the second apply fails partway with an "already exists" error. Set a distinct `firewall_policy.name` per hub:
+
+```hcl
+virtual_hubs = {
+  managed = {
+    # ...
+    firewall_policy = { name = "fwp-managed-${var.location}" }
+  }
+  customer = {
+    # ...
+    firewall_policy = { name = "fwp-customer-${var.location}" }
+  }
+}
+```
+
+### Discovery and permissions
+
+Only customer-mode configurations perform subscription firewall inventory. The AzAPI identity needs `Microsoft.Network/azureFirewalls/read` at the firewall subscription, plus read access to the selected hub and public IPs. This inventory distinguishes an existing managed firewall from a fresh customer deployment before Terraform can remove the legacy resource. Matching uses the intended subscription, resource group and firewall name, case-insensitively; a same-name firewall in another resource group is not the target. The firewall name and resource group must therefore be known at plan time: derive them from inputs, not from attributes computed during apply such as a new resource group's `id`. Managed-only configurations perform no new inventory reads and acquire no new inventory permission requirement.
+
+Normal input-value dependencies on newly created resource groups are retained. Discovery does not depend on new public IP or hub IDs. Genuinely deferred inventory or an unresolved target identity cannot be treated as absence: planning stops rather than risking deletion. An explicit, broad `depends_on` on the entire module can defer discovery and is not a substitute for ordinary resource/input dependencies.
+
+### Maintenance
+
+Adding, removing or replacing customer IP entries while keeping at least one entry is a maintenance operation. It is not a zero-downtime guarantee. Keep map keys stable, plan the address/rule changes explicitly, and measure control-plane duration and traffic impact separately. Removing the final customer IP or adding customer IPs to an existing managed firewall is a mode conversion and is blocked. Cross-mode conversion is not supported by this module; disabling/removing the whole firewall remains a destructive operation.
+
+Customer-mode firewall requests use API version `2024-10-01` by default.
+
 <!-- markdownlint-disable MD033 -->
 ## Requirements
 
@@ -13,7 +77,7 @@ The following requirements are needed by this module:
 
 - <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) (~> 1.9)
 
-- <a name="requirement_azapi"></a> [azapi](#requirement\_azapi) (~> 2.4)
+- <a name="requirement_azapi"></a> [azapi](#requirement\_azapi) (~> 2.12)
 
 - <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) (~> 4.0)
 
@@ -111,6 +175,40 @@ Type: `bool`
 
 Default: `true`
 
+### <a name="input_ignore_body_changes"></a> [ignore\_body\_changes](#input\_ignore\_body\_changes)
+
+Description: (Optional) Body property paths on the resources this module creates through the `azapi` provider that the provider stops reconciling after creation, so an out-of-band controller such as Azure Virtual Network Manager or an Azure Policy `DeployIfNotExists` assignment can own them without producing perpetual drift. Paths use dot notation.
+
+- `virtual_hubs_firewalls` - (Optional) Ignored body paths for the firewall of every secured hub. The paths that carry the firewall's IP configuration and its hub association cannot be ignored, because the module reconciles them. Default `[]`.
+- `virtual_hubs_firewalls_diagnostic_settings` - (Optional) Ignored body paths for the diagnostic settings of every secured hub firewall. Default `[]`.
+- `virtual_hubs_route_maps` - (Optional) An object with the following field:
+  - `virtual_hubs_route_maps` - (Optional) Ignored body paths applied to every route map in `route_maps`. Default `[]`.
+- `virtual_networks` - (Optional) Ignored body paths for the sidecar virtual network of every hub, for example `["tags"]` when Azure Policy applies tags out-of-band. Default `[]`.
+- `virtual_networks_subnets` - (Optional) An object with the following field:
+  - `virtual_networks_subnets` - (Optional) Ignored body paths applied to every sidecar subnet, for example `["properties.routeTable"]`. A per-subnet `ignore_body_changes` entry in `virtual_hubs.<key>.sidecar_virtual_network.subnets` takes precedence over this shared value. Default `[]`.
+
+Leave the matching dedicated input unset for any path you ignore, because while a path is ignored, configuration changes at that path are no longer sent to Azure. The value is write-only provider state, so a change only takes effect after an `apply`, and supplying a non-empty list requires Terraform 1.11 or later.
+
+Virtual network peerings are deliberately not exposed here, because this module connects the sidecar virtual network through the Virtual WAN hub rather than through peerings it manages itself.
+
+Type:
+
+```hcl
+object({
+    virtual_hubs_firewalls                     = optional(list(string), [])
+    virtual_hubs_firewalls_diagnostic_settings = optional(list(string), [])
+    virtual_hubs_route_maps = optional(object({
+      virtual_hubs_route_maps = optional(list(string), [])
+    }), {})
+    virtual_networks = optional(list(string), [])
+    virtual_networks_subnets = optional(object({
+      virtual_networks_subnets = optional(list(string), [])
+    }), {})
+  })
+```
+
+Default: `{}`
+
 ### <a name="input_private_link_private_dns_zone_virtual_network_link_moved_block_template_module_prefix"></a> [private\_link\_private\_dns\_zone\_virtual\_network\_link\_moved\_block\_template\_module\_prefix](#input\_private\_link\_private\_dns\_zone\_virtual\_network\_link\_moved\_block\_template\_module\_prefix)
 
 Description: (Optional) A prefix to use for the moved block template module for virtual network links.
@@ -120,6 +218,36 @@ NOTE: This is a temporary variable to support migration to the new module and wi
 Type: `string`
 
 Default: `""`
+
+### <a name="input_resource_types"></a> [resource\_types](#input\_resource\_types)
+
+Description: AzAPI resource-type overrides for firewalls. Omitted versions use the owning submodule's defaults.
+
+- `network_virtual_wans` - Virtual WAN submodule resource types.
+- `network_virtual_wans.network_azure_firewalls` - Firewall submodule resource types.
+- `network_virtual_wans.network_azure_firewalls.network_azure_firewalls` - Firewall and inventory API.
+- `network_virtual_wans.network_azure_firewalls.network_public_ip_addresses` - Caller-owned public IP read API.
+- `network_virtual_wans.network_azure_firewalls.network_virtual_hubs` - Secured hub read API.
+- `network_virtual_wans.network_azure_firewalls.network_virtual_wans` - Secured hub's parent Virtual WAN read API.
+- `network_virtual_wans.network_azure_firewalls.insights_diagnostic_settings` - Firewall diagnostic settings API.
+
+Type:
+
+```hcl
+object({
+    network_virtual_wans = optional(object({
+      network_azure_firewalls = optional(object({
+        network_azure_firewalls      = optional(string)
+        network_public_ip_addresses  = optional(string)
+        network_virtual_hubs         = optional(string)
+        network_virtual_wans         = optional(string)
+        insights_diagnostic_settings = optional(string)
+      }), {})
+    }), {})
+  })
+```
+
+Default: `{}`
 
 ### <a name="input_retry"></a> [retry](#input\_retry)
 
@@ -236,11 +364,13 @@ The following top level attributes are supported:
   - `private_dns_zones` - (Optional) Should private DNS zones be created? Default `true`.
   - `private_dns_resolver` - (Optional) Should the private DNS resolver be created? Default `true`.
   - `sidecar_virtual_network` - (Optional) Should the sidecar virtual network be created? Default `true`.
+- `is_primary` - (Optional) Marks this hub as the primary region. The primary region is used to determine the default location for resources like the Virtual WAN, DDoS Protection Plan, and is used to determine which region hosts the full set of private DNS zones. Only one hub should be marked as primary. If not specified, the first hub key in alphabetical order is used as the primary region. Default `false`.
 - `default_hub_address_space` - (Optional) The default address space to use if not specified in the hub. This defaults to `10.0.0.0/16` and increments to the next /16 for each region if not supplied.
 - `default_parent_id` - (Optional) The default parent resource group ID to use if not specified in hub or individual sections.
 - `location` - (Required) The Azure location where the Virtual WAN hub resources should be created.
 - `hub` - (Optional) An object defining the Virtual WAN hub settings.
 - `virtual_network_connections` - (Optional) A map of Virtual Network connections to create.
+- `route_tables` - (Optional) A map of route tables to create in this Virtual Hub. Default `{}`.
 - `express_route_circuit_connections` - (Optional) A map of ExpressRoute circuit connections
 - `bgp_connections` - (Optional) A map of BGP connections to create on the Virtual Hub router (for direct NVA peering).
 - `p2s_gateway_vpn_server_configurations` - (Optional) A map of Point-to-Site VPN server configurations.
@@ -282,6 +412,19 @@ The following top level attributes are supported:
       - `labels` - (Optional) A list of labels for route propagation.
     - `inbound_route_map_id` - (Optional) The ID of the inbound route map.
     - `outbound_route_map_id` - (Optional) The ID of the outbound route map.
+
+## Virtual Hub Route Tables
+
+- `route_tables` - (Optional) A map of route tables to create in this Virtual Hub. The map key is an arbitrary identifier scoped to this hub. Default `{}`. Each route table is an object with the following fields:
+  - `name` - (Required) The name of the Virtual Hub Route Table. Changing this forces a new resource to be created.
+  - `labels` - (Optional) A list of labels associated with the route table.
+  - `routes` - (Optional) A map of routes in the Virtual Hub Route Table. The map key is an arbitrary identifier. Default `{}`. Each route is an object with the following fields:
+    - `name` - (Required) The name of the route.
+    - `destinations` - (Required) A list of destination addresses for the route.
+    - `destinations_type` - (Required) The destination type. Possible values are `CIDR`, `ResourceId`, and `Service`.
+    - `next_hop` - (Optional) The next hop resource ID. Required when `vnet_connection_key` is not specified.
+    - `vnet_connection_key` - (Optional) The key of a Virtual Network connection in this hub's `virtual_network_connections` map. The module resolves the connection's resource ID automatically. Required when `next_hop` is not specified.
+    - `next_hop_type` - (Optional) The next hop type. The only supported value is `ResourceId`. Default `ResourceId`.
 
 ## ExpressRoute Circuit Connections
 
@@ -440,6 +583,7 @@ The following top level attributes are supported:
         - `name` - (Required) The name of the service delegation.
         - `actions` - (Optional) A list of actions for the delegation.
     - `default_outbound_access_enabled` - (Optional) Should default outbound access be enabled? Default `false`.
+    - `ignore_body_changes` - (Optional) A list of subnet body property paths, in dot notation (for example `properties.routeTable`), that the `azapi` provider stops reconciling after creation. Use this when an out-of-band controller such as Azure Virtual Network Manager or an Azure Policy `DeployIfNotExists` assignment owns the property, so that it does not produce perpetual drift. Leave the matching dedicated input (`route_table`, `network_security_group`, `service_endpoints`, `delegations`) unset for any path you ignore, and note that while a path is ignored, configuration changes at that path are no longer sent to Azure. The value is write-only provider state, so a change only takes effect after an `apply`, and supplying a non-empty list requires Terraform 1.11 or later. Default `[]`.
 
 ## Azure Firewall
 
@@ -449,7 +593,8 @@ The following top level attributes are supported:
   - `sku_tier` - (Optional) The SKU tier for the Azure Firewall. Possible values are `Basic`, `Standard`, `Premium`. Default `Standard`.
   - `zones` - (Optional) A list of availability zones for the Azure Firewall.
   - `firewall_policy_id` - (Optional) The resource ID of the Azure Firewall Policy to associate with the firewall.
-  - `vhub_public_ip_count` - (Optional) The number of public IP addresses to assign to the Virtual Hub firewall.
+  - `vhub_public_ip_count` - (Optional) Managed public IP count, expressed as a string. Null defaults to one managed IP with an empty `ip_configurations` map. With customer IPs, only null or zero is valid; a positive managed count cannot be combined with customer IPs.
+  - `ip_configurations` - (Optional) Map of caller-owned public IP configurations, default `{}`. Stable keys must be known at plan time. Each entry requires `name` and `public_ip_address_id`; resource IDs can be unknown until apply. Names and IDs must be unique ignoring case. A nonempty map selects customer-only mode. IPs must be Standard/Regional, static IPv4, in the hub's subscription and region, and unassociated or already attached to the same firewall. Add/remove/replace operations within customer mode are maintenance changes. Existing mode conversion is blocked.
   - `tags` - (Optional) A map of tags to apply to the Azure Firewall.
 
 ## Azure Firewall Policy
@@ -457,9 +602,10 @@ The following top level attributes are supported:
 - `firewall_policy` - (Optional) An object with the following fields:
   - `name` - (Optional) The name of the firewall policy. If not specified will use `afw-policy-{vnetname}`.
   - `resource_group_name` - (Optional) The name of the resource group where the firewall policy should be created. If not specified will use the parent resource group of the virtual network.
+  - `location` - (Optional) The Azure region for the firewall policy. Defaults to the hub's location when omitted, `null`, or an empty string, including when `base_policy_id` is set. The module does not infer the region from `base_policy_id`. If the base policy is in a different region from the hub, explicitly set this field to the base policy's region. The associated firewall remains in its hub region. Changing the location of an existing firewall policy replaces it.
   - `sku` - (Optional) The SKU to use for the firewall policy. Possible values include `Standard`, `Premium`. Default `Standard`.
   - `auto_learn_private_ranges_enabled` - (Optional) Should the firewall policy automatically learn private ranges? Default `false`.
-  - `base_policy_id` - (Optional) The resource id of the base policy to use for the firewall policy.
+  - `base_policy_id` - (Optional) The resource ID of the base policy to use for the firewall policy. Azure requires both policies to reside in the same region; see `location` above.
   - `dns` - (Optional) An object with the following fields:
     - `proxy_enabled` - (Optional) Should the DNS proxy be enabled for the firewall policy? Default `false`.
     - `servers` - (Optional) A list of DNS server IP addresses for the firewall policy.
@@ -676,6 +822,7 @@ map(object({
       sidecar_virtual_network               = optional(bool, true)
     }), {})
 
+    is_primary                = optional(bool, false)
     default_hub_address_space = optional(string)
     default_parent_id         = optional(string)
     location                  = string
@@ -917,6 +1064,7 @@ map(object({
             )
           ))
           default_outbound_access_enabled = optional(bool, false)
+          ignore_body_changes             = optional(list(string), [])
         }
       )), {})
     }), {})
@@ -928,12 +1076,17 @@ map(object({
       zones                = optional(list(number))
       firewall_policy_id   = optional(string)
       vhub_public_ip_count = optional(string)
-      tags                 = optional(map(string))
+      ip_configurations = optional(map(object({
+        name                 = string
+        public_ip_address_id = string
+      })), {})
+      tags = optional(map(string))
     }), {})
 
     firewall_policy = optional(object({
       name                              = optional(string)
       resource_group_name               = optional(string)
+      location                          = optional(string)
       sku                               = optional(string, "Standard")
       auto_learn_private_ranges_enabled = optional(bool)
       base_policy_id                    = optional(string)
@@ -1408,7 +1561,7 @@ Version: 0.1.0
 
 Source: Azure/avm-res-network-virtualnetwork/azurerm
 
-Version: 0.15.0
+Version: 0.22.2
 
 ### <a name="module_virtual_network_subnet_ip_prefixes"></a> [virtual\_network\_subnet\_ip\_prefixes](#module\_virtual\_network\_subnet\_ip\_prefixes)
 
