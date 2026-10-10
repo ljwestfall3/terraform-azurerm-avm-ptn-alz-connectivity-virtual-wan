@@ -1,0 +1,15 @@
+module "regions" {
+  source  = "git::https://avm.mirror.invalid/terraform-azurerm-avm-utl-regions.git?ref=v0.5.2-local"
+  count   = local.has_regions ? 1 : 0
+
+  availability_zones_filter = false
+  enable_telemetry          = var.enable_telemetry
+  recommended_filter        = false
+  use_cached_data           = false
+}
+
+locals {
+  availability_zones = local.has_regions ? {
+    for key, value in var.virtual_hubs : key => module.regions[0].regions_by_name[value.location].zones == null ? [] : module.regions[0].regions_by_name[value.location].zones
+  } : null
+}
