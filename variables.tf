@@ -226,6 +226,11 @@ variable "virtual_hubs" {
         }))
         inbound_route_map_id  = optional(string)
         outbound_route_map_id = optional(string)
+        static_vnet_route = optional(object({
+          name                = optional(string)
+          address_prefixes    = optional(list(string), [])
+          next_hop_ip_address = optional(string)
+        }))
       }))
     })), {})
 
